@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>
+      Testing behavior of AudioContext after execution context is detached
+    </title>
+    <script src="/resources/testharness.js"></script>
+    <script src="/resources/testharnessreport.js"></script>
+    <script src="/webaudio/resources/audit.js"></script>
+  </head>
+  <body>
+    <script id="layout-test-code">
+      const audit = Audit.createTaskRunner();
+
+      audit.define('decoding-on-detached-iframe', async (task, should) => {
+        const iframe =
+            document.createElementNS("http://www.w3.org/1999/xhtml", "iframe");
+        document.body.appendChild(iframe);
+        let context = new iframe.contentWindow.AudioContext();
+        document.body.removeChild(iframe);
+
+        // TODO(crbug.com/1060315): For the time being, this should return a
+        // pending Promise without throwing an exception but it needs to be
+        // updated when the spec resolution is made.
+        const undefinedReturnValue =
+            await context.decodeAudioData(new ArrayBuffer(1));
+        should(undefinedReturnValue, 'Return value from decodeAudioData')
+            .beEqualTo(undefined);
+
+        task.done();
+      });
+
+      audit.run();
+    </script>
+  </body>
+</html>
