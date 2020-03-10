@@ -7,6 +7,47 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
 import { getGPU } from '../../framework/gpu/implementation.js';
 import { Fixture, assert, unreachable } from '../../framework/index.js';
 let glslangInstance;
+
+class DevicePool {
+  constructor() {
+    _defineProperty(this, "device", undefined);
+
+    _defineProperty(this, "state", 'uninitialized');
+  }
+
+  async initialize() {
+    try {
+      const gpu = getGPU();
+      const adapter = await gpu.requestAdapter();
+      this.device = await adapter.requestDevice();
+    } catch (ex) {
+      this.state = 'failed';
+      throw ex;
+    }
+  }
+
+  async acquire() {
+    assert(this.state !== 'acquired', 'Device was in use');
+    assert(this.state !== 'failed', 'Failed to initialize WebGPU device');
+    const state = this.state;
+    this.state = 'acquired';
+
+    if (state === 'uninitialized') {
+      await this.initialize();
+    }
+
+    return this.device;
+  }
+
+  release(device) {
+    assert(this.state === 'acquired');
+    this.device = device;
+    this.state = 'free';
+  }
+
+}
+
+const devicePool = new DevicePool();
 export class GPUTest extends Fixture {
   constructor(...args) {
     super(...args);
@@ -22,9 +63,7 @@ export class GPUTest extends Fixture {
 
   async init() {
     super.init();
-    const gpu = getGPU();
-    const adapter = await gpu.requestAdapter();
-    this.device = await adapter.requestDevice();
+    this.device = await devicePool.acquire();
     this.queue = this.device.defaultQueue;
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
@@ -60,6 +99,8 @@ export class GPUTest extends Fixture {
         this.fail('Unexpected out-of-memory error occurred');
       }
     }
+
+    devicePool.release(this.device);
   }
 
   async initGLSL() {
